@@ -1,9 +1,7 @@
-use rusqlite::ToSql;
-
-pub trait Model {
-    fn new(row: &rusqlite::Row) -> Result<Self, String>
+pub trait Model
+where Self: PartialEq
+{
+    fn from_row(row: &rusqlite::Row) -> Result<Self, String>
     where
         Self: Sized;
-
-    fn params(&self) -> Vec<&dyn ToSql>;
 }

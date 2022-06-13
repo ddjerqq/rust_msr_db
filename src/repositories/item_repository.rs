@@ -1,18 +1,17 @@
 use std::borrow::BorrowMut;
 use std::sync::{Arc, Mutex};
 
-use rusqlite;
 use rusqlite::{Connection, params};
 
-use crate::models::model::Model;
-use crate::models::user::User;
-pub use crate::repositories::repository::Repository;
+use crate::models::item::Item;
+pub use crate::models::model::Model;
+use crate::repositories::repository::Repository;
 
-pub struct UserRepository {
+pub struct ItemRepository {
     connection: Arc<Mutex<Connection>>,
 }
 
-impl Repository<User> for UserRepository {
+impl Repository<Item> for ItemRepository {
     fn new(connection: Arc<Mutex<Connection>>) -> Self {
         Self { connection }
     }
@@ -28,7 +27,7 @@ impl Repository<User> for UserRepository {
         Ok(())
     }
 
-    fn get_all(&self) -> Result<Vec<User>, String> {
+    fn get_all(&self) -> Result<Vec<Item>, String> {
         let mut con =
             self.connection
                 .lock()
@@ -36,11 +35,11 @@ impl Repository<User> for UserRepository {
 
         let mut stmt = con
             .borrow_mut()
-            .prepare("SELECT * FROM users")
+            .prepare("SELECT * FROM items")
             .map_err(|e| e.to_string())?;
 
         let entities = stmt.query_map([], |row| {
-            if let Ok(entity) = User::from_row(row) {
+            if let Ok(entity) = Item::from_row(row) {
                 Ok(entity)
             } else {
                 Err(rusqlite::Error::QueryReturnedNoRows)
@@ -50,23 +49,23 @@ impl Repository<User> for UserRepository {
         Ok(entities.flatten().collect())
     }
 
-    fn get_by_id(&self, id: &u64) -> Result<Option<User>, String> {
+    fn get_by_id(&self, id: &u64) -> Result<Option<Item>, String> {
         let mut con = self.connection
             .lock()
             .map_err(|e| e.to_string())?;
 
         let mut stmt = con
-                .borrow_mut()
-                .prepare("SELECT * FROM users WHERE id=?1")
-                .map_err(|e| e.to_string())?;
+            .borrow_mut()
+            .prepare("SELECT * FROM items WHERE id=?1")
+            .map_err(|e| e.to_string())?;
 
         let mut result = stmt.query_map([id], |row| {
-            Ok(User::from_row(row))
+            Ok(Item::from_row(row))
         }).map_err(|e| e.to_string())?;
 
-        if let Some(user) = result.next() {
-            return if let Ok(Ok(user)) = user {
-                Ok(Some(user))
+        if let Some(entity) = result.next() {
+            return if let Ok(Ok(entity)) = entity {
+                Ok(Some(entity))
             } else {
                 Ok(None)
             }
@@ -74,28 +73,46 @@ impl Repository<User> for UserRepository {
         Ok(None)
     }
 
-    fn add(&mut self, entity: &User) -> Result<(), String> {
+    fn add(&mut self, entity: &Item) -> Result<(), String> {
         self.connection
             .lock()
             .map_err(|e| e.to_string())?
             .borrow_mut()
-            .execute("INSERT INTO Users(id, name, wallet, bank)
-                     VALUES(?1, ?2, ?3, ?4)",
-                     params![entity.id(), entity.name, entity.wallet, entity.bank])
+            .execute("
+            INSERT INTO items
+            (
+                id,
+                type,
+                rarity,
+                owner_id
+            )
+            VALUES(?1, ?2, ?3, ?4)",
+            params![
+                entity.id(),
+                entity.type_().to_i32(),
+                entity.rarity.to_f64(),
+                entity.owner_id
+            ])
             .map_err(|e| e.to_string())?;
 
         Ok(())
     }
 
-    fn update(&mut self, entity: &User) -> Result<(), String> {
+    fn update(&mut self, entity: &Item) -> Result<(), String> {
         self.connection
             .lock()
             .map_err(|e| e.to_string())?
             .borrow_mut()
-            .execute("UPDATE Users
-            SET name=?2, wallet=?3, bank=?4
+            .execute("
+            UPDATE items
+            SET type=?2, rarity=?3, owner_id=?4
             WHERE id=?1;",
-            params![entity.id(), entity.name, entity.wallet, entity.bank])
+            params![
+                entity.id(),
+                entity.type_().to_i32(),
+                entity.rarity.to_f64(),
+                entity.owner_id
+            ])
             .map_err(|e| e.to_string())?;
 
         Ok(())
@@ -106,7 +123,7 @@ impl Repository<User> for UserRepository {
             .lock()
             .map_err(|e| e.to_string())?
             .borrow_mut()
-            .execute("DELETE FROM Users WHERE id=?1;",
+            .execute("DELETE FROM items WHERE id=?1;",
                      params![id])
             .map_err(|e| e.to_string())?;
 
